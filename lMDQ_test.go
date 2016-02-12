@@ -6,12 +6,8 @@ import (
 	"testing"
 )
 
-const (
-	feed = "MEC"
-)
-
 var (
-	hashes      []string
+	hashes  =   []string{}
 	hub     = MDQ{url: "https://test-phph.test.lan/test-md/WAYF-HUB-PUBLIC.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
 	hub_ops = MDQ{url: "https://test-phph.test.lan/MDQ/HUB-OPS/entities/HUB-OPS.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
 	edugain = MDQ{url: "https://test-phph.test.lan/test-md/MEC.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
@@ -22,11 +18,11 @@ func TestMain(m *testing.M) {
 	hub_ops.Open("hub_ops.mddb")
 	edugain.Open("edugain.mddb")
 
-	var (
-		hash string
-	)
-	hashes = []string{}
+	os.Exit(m.Run())
+}
 
+func getBenchmarkHashes() {
+	hash := ""
 	rows, err := hub_ops.db.Query("select l.hash from entity e, lookup l where e.id = l.entity_id_fk order by l.hash")
 	if err != nil {
 		log.Panicln(err)
@@ -37,7 +33,6 @@ func TestMain(m *testing.M) {
 		rows.Scan(&hash)
 		hashes = append(hashes, hash)
 	}
-	os.Exit(m.Run())
 }
 
 func TestUpdate(t *testing.T) {
@@ -50,11 +45,11 @@ func TestUpdate(t *testing.T) {
 }
 
 func BenchmarkMDQ(b *testing.B) {
-	max := len(hashes)
+    getBenchmarkHashes()
+    max := len(hashes)
 
 	for i := 0; i < b.N; i++ {
 		hash := hashes[i % max]
 		_, _, _ = hub_ops.MDQ("{sha1}" + hash)
 	}
-	log.Println(max)
 }

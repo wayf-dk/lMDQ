@@ -30,9 +30,7 @@ import (
 	"github.com/wayf-dk/gosaml"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -155,11 +153,12 @@ func (mdq *MDQ) Update() (err error) {
 	if err != nil {
 		return err
 	}
+	var md []byte
+    if md, err = Get(mdq.url); err != nil {
+        return
+    }
 
-	dom, err := MDQclient(mdq.url, "")
-	//	ents := dom.Query(nil, "./md:EntityDescriptor")
-	//	dom.UnlinkNode(ents[25])
-	//    ents[26].SetAttr("anton", "banton")
+    dom := gosaml.NewXp(md)
 
 	if _, err := dom.SchemaValidate(metadataSchema); err != nil {
 		log.Println("feed", "SchemaError")
@@ -284,7 +283,7 @@ func (mdq *MDQ) Update() (err error) {
 }
 
 // getEntityList returns a map keyed by entityIDs for the
-// current entities in the database belonging to the feed
+// current entities in the database
 func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 
 	entities = make(map[string]EntityRec)
@@ -307,49 +306,22 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 	return
 }
 
-// MDQclient - read some metadata from either a MDQ Server or a normal feed url.
-// Key is either en entityID or Location - allows lookup entity by endpoints,
-// this is currently only supported by the phph.wayf.dk/MDQ and is used by WAYF for mass virtual entity hosting
-// in BIRK and KRIB. THE PHPh MDQ server only understands the sha1 encoded parameter and currently only
-// understands request for 1 entity at a time.
-// If key is "" the mdq string is used as a normal feed url.
-func MDQclient(mdq, key string) (mdxp *gosaml.Xp, err error) {
-	if key != "" {
-		mdq = mdq + "/entities/{sha1}" + hex.EncodeToString(gosaml.Hash(crypto.SHA1, key))
-	}
-	url, _ := url.Parse(mdq)
-
+// Get - insecure Get if https is used, doesn't matter for metadata as we check the signature anyway
+func Get(url string) (body []byte, err error) {
 	tr := &http.Transport{
 		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
-		Dial:               func(network, addr string) (net.Conn, error) { return net.Dial("tcp", addr) },
-		DisableCompression: true,
 	}
 	client := &http.Client{
 		Transport:     tr,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error { return errors.New("redirect not supported") },
-	}
-
-	var req *http.Request
-	if req, err = http.NewRequest("GET", url.String(), nil); err != nil {
-		return
 	}
 	var resp *http.Response
-	if resp, err = client.Do(req); err != nil {
+	if resp, err = client.Get(url); err != nil {
 		return
 	}
-	if resp.StatusCode != 200 {
-		if key == "" {
-			key = mdq
-		}
-		err = fmt.Errorf("Metadata not found for entity: %s", key)
-		//	    err = fmt.Errorf("looking for: '%s' using: '%s' MDQ said: %s\n", key, url.String(), resp.Status)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
 		return
 	}
-	var md []byte
-	if md, err = ioutil.ReadAll(resp.Body); err != nil {
-		return
-	}
-
-	mdxp = gosaml.NewXp(md)
+	body, err = ioutil.ReadAll(resp.Body)
 	return
 }
