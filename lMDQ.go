@@ -31,6 +31,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	//"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -79,36 +80,70 @@ type (
 	MDQ struct {
 		db        *sql.DB
 		stmt      *sql.Stmt
-		url, hash string
+		url, hash, path string
+
+	}
+
+	MdXp struct {
+		*gosaml.Xp
+		master  *MdXp
+		created time.Time
 	}
 )
 
 var (
-    mdcache map[string]*gosaml.Xp
-    mdlock sync.Mutex
-    cacheduration = time.Minute * 1
+	mdcache       map[string]*MdXp
+	mdlock        sync.Mutex
+	cacheduration = time.Minute * 1
+
+	indextargets = []string{
+		"./md:IDPSSODescriptor/md:SingleSignOnService[@Binding='urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect']/@Location",
+		"./md:SPSSODescriptor/md:AssertionConsumerService[@Binding='urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST']/@Location",
+	}
+	getcache    map[string][]byte
+	getlock     sync.Mutex
 )
 
 func init() {
-    mdcache = make(map[string]*gosaml.Xp)
+	mdcache = make(map[string]*MdXp)
+	getcache = make(map[string][]byte)
 }
 
-func (mdq *MDQ) Open(path string) (mdq1 *MDQ, err error) {
+func (xp *MdXp) Valid(duration time.Duration) bool {
+	since := time.Since(xp.created)
+	//log.Println(since, duration, since  < duration)
+	return since < duration
+}
+
+func (mdq *MDQ) XOpen(path string) (mdqx *MDQ, err error) {
+    mdq.path = path
 	mdq.db, err = sql.Open("sqlite3", path)
 	if err != nil {
+		log.Println("opening mddb ", err)
 		return
 	}
-	_, err = mdq.db.Exec(lMDQSchema)
-	if err != nil {
-	    log.Println(err)
-		return
-	}
-	mdq.stmt, err = mdq.db.Prepare(`select e.md, e.hash from entity e, lookup l, validuntil v
+
+	mdq.stmt, err = mdq.db.Prepare(`select e.md from entity e, lookup l, validuntil v
 	where l.hash = $1 and l.entity_id_fk = e.id and v.validuntil >= $2`)
 	if err != nil {
 		return
 	}
-	mdq1 = mdq
+	return
+}
+
+func Open(path string) (mdq *MDQ, err error) {
+    mdq = new(MDQ)
+    mdq.path = path
+	mdq.db, err = sql.Open("sqlite3", path)
+	if err != nil {
+		return
+	}
+
+	mdq.stmt, err = mdq.db.Prepare(`select e.md from entity e, lookup l, validuntil v
+	where l.hash = $1 and l.entity_id_fk = e.id and v.validuntil >= $2`)
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -119,7 +154,8 @@ func (mdq *MDQ) Open(path string) (mdq1 *MDQ, err error) {
 // The hash can be used to decide if a cached dom object is still valid,
 // This might be an optimization as the database lookup is much faster that the parsing.
 
-func (mdq *MDQ) MDQ(key string) (xp *gosaml.Xp, hash string, err error) {
+func (mdq *MDQ) MDQ(key string) (xp *gosaml.Xp, err error) {
+	k := key
 	const prefix = "{sha1}"
 	if strings.HasPrefix(key, prefix) {
 		key = key[6:]
@@ -127,21 +163,28 @@ func (mdq *MDQ) MDQ(key string) (xp *gosaml.Xp, hash string, err error) {
 		key = hex.EncodeToString(gosaml.Hash(crypto.SHA1, key))
 	}
 
-    mdlock.Lock()
-    defer mdlock.Unlock()
-    cachedxp := mdcache[key]
-    if cachedxp != nil && cachedxp.Valid(cacheduration) {
-        xp = cachedxp.CpXp()
-        return
-    }
+	mdlock.Lock()
+	defer mdlock.Unlock()
+	cachedxp := mdcache[key]
+	if cachedxp != nil && cachedxp.Valid(cacheduration) {
+		xp = cachedxp.Xp.CpXp()
+		return
+	}
 
 	var xml []byte
-	err = mdq.stmt.QueryRow(key, time.Now().Unix()).Scan(&xml, &hash)
-
+	err = mdq.stmt.QueryRow(key, time.Now().Unix()).Scan(&xml)
+	if err != nil {
+		//log.Println("query", mdq.path, k, key, err, string(xml))
+		err = fmt.Errorf("Metadata not found for entity: %s", k)
+		//debug.PrintStack()
+		return
+	}
 	xp = gosaml.NewXp(xml)
-	mdcache[key] = xp
-	//	const ssoquery = "./md:IDPSSODescriptor/md:SingleSignOnService[@Binding='urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect']/@Location"
-	//	_ = xp.Query1(nil, ssoquery)
+	mdxp := new(MdXp)
+	mdxp.Xp = xp
+	mdxp.created = time.Now()
+
+	mdcache[key] = mdxp
 	return
 }
 
@@ -149,16 +192,21 @@ func (mdq *MDQ) Update() (err error) {
 	start := time.Now()
 	log.Println("lMDQ updating", mdq.url)
 
+	_, err = mdq.db.Exec(lMDQSchema)
+	if err != nil {
+		return
+	}
+
 	recs, err := mdq.getEntityList()
 	if err != nil {
 		return err
 	}
 	var md []byte
-    if md, err = Get(mdq.url); err != nil {
-        return
-    }
+	if md, err = Get(mdq.url); err != nil {
+		return
+	}
 
-    dom := gosaml.NewXp(md)
+	dom := gosaml.NewXp(md)
 
 	if _, err := dom.SchemaValidate(metadataSchema); err != nil {
 		log.Println("feed", "SchemaError")
@@ -176,8 +224,8 @@ func (mdq *MDQ) Update() (err error) {
 	}
 
 	ok := dom.VerifySignature(nil, key)
-	if !ok || keyname != mdq.hash {
-		return fmt.Errorf("Signature check failed. Signature %t, %s = %s", ok, keyname, mdq.hash)
+	if ok != nil || keyname != mdq.hash {
+		return fmt.Errorf("Signature check failed. Signature %s, %s = %s", ok, keyname, mdq.hash)
 	}
 
 	tx, err := mdq.db.Begin()
@@ -198,7 +246,7 @@ func (mdq *MDQ) Update() (err error) {
 	}
 	defer entityInsertStmt.Close()
 
-	lookupInsertStmt, err := tx.Prepare("insert into lookup (hash, entity_id_fk) values (?, ?)")
+	lookupInsertStmt, err := tx.Prepare("insert or ignore into lookup (hash, entity_id_fk) values (?, ?)")
 	if err != nil {
 		return err
 	}
@@ -253,12 +301,15 @@ func (mdq *MDQ) Update() (err error) {
 		if err != nil {
 			return
 		}
-		locations := dom.Query(entity, "./md:IDPSSODescriptor/md:SingleSignOnService[@Binding='urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect']/@Location")
-		for _, location := range locations {
-			//log.Println(i, dom.NodeGetContent(location))
-			_, err = lookupInsertStmt.Exec(hex.EncodeToString(gosaml.Hash(crypto.SHA1, dom.NodeGetContent(location))), id)
-			if err != nil {
-				return
+
+		for _, target := range indextargets {
+			locations := dom.Query(entity, target)
+			for i, location := range locations {
+				log.Println(i, dom.NodeGetContent(location))
+				_, err = lookupInsertStmt.Exec(hex.EncodeToString(gosaml.Hash(crypto.SHA1, dom.NodeGetContent(location))), id)
+				if err != nil {
+					return
+				}
 			}
 		}
 	}
@@ -275,7 +326,6 @@ func (mdq *MDQ) Update() (err error) {
 	if err != nil {
 		return
 	}
-
 
 	log.Printf("lMDQ finished new: %d updated: %d nochange: %d deleted: %d validUntil: %s duration: %.1f",
 		new, updated, nochange, deleted, time.Unix(validUntil, 0).Format(time.RFC3339), time.Since(start).Seconds())
@@ -308,11 +358,19 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 
 // Get - insecure Get if https is used, doesn't matter for metadata as we check the signature anyway
 func Get(url string) (body []byte, err error) {
+	log.Println("lMDQ get ", url)
+	getlock.Lock()
+	defer getlock.Unlock()
+    body = getcache[url]
+    if body != nil {
+        log.Println("lMDQ got cached ", url)
+        return
+    }
 	tr := &http.Transport{
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{
-		Transport:     tr,
+		Transport: tr,
 	}
 	var resp *http.Response
 	if resp, err = client.Get(url); err != nil {
@@ -323,5 +381,7 @@ func Get(url string) (body []byte, err error) {
 		return
 	}
 	body, err = ioutil.ReadAll(resp.Body)
+	getcache[url] = body
+	log.Println("lMDQ downloaded ", url)
 	return
 }
