@@ -78,10 +78,9 @@ type (
 	}
 
 	MDQ struct {
-		db        *sql.DB
-		stmt      *sql.Stmt
+		db              *sql.DB
+		stmt            *sql.Stmt
 		url, hash, path string
-
 	}
 
 	MdXp struct {
@@ -100,8 +99,8 @@ var (
 		"./md:IDPSSODescriptor/md:SingleSignOnService[@Binding='urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect']/@Location",
 		"./md:SPSSODescriptor/md:AssertionConsumerService[@Binding='urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST']/@Location",
 	}
-	getcache    map[string][]byte
-	getlock     sync.Mutex
+	getcache map[string][]byte
+	getlock  sync.Mutex
 )
 
 func init() {
@@ -116,7 +115,7 @@ func (xp *MdXp) Valid(duration time.Duration) bool {
 }
 
 func (mdq *MDQ) XOpen(path string) (mdqx *MDQ, err error) {
-    mdq.path = path
+	mdq.path = path
 	mdq.db, err = sql.Open("sqlite3", path)
 	if err != nil {
 		log.Println("opening mddb ", err)
@@ -132,8 +131,8 @@ func (mdq *MDQ) XOpen(path string) (mdqx *MDQ, err error) {
 }
 
 func Open(path string) (mdq *MDQ, err error) {
-    mdq = new(MDQ)
-    mdq.path = path
+	mdq = new(MDQ)
+	mdq.path = path
 	mdq.db, err = sql.Open("sqlite3", path)
 	if err != nil {
 		return
@@ -153,7 +152,6 @@ func Open(path string) (mdq *MDQ, err error) {
 // and the metadata and a hash/etag over the content if it is.
 // The hash can be used to decide if a cached dom object is still valid,
 // This might be an optimization as the database lookup is much faster that the parsing.
-
 func (mdq *MDQ) MDQ(key string) (xp *gosaml.Xp, err error) {
 	k := key
 	const prefix = "{sha1}"
@@ -358,14 +356,14 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 
 // Get - insecure Get if https is used, doesn't matter for metadata as we check the signature anyway
 func Get(url string) (body []byte, err error) {
-	log.Println("lMDQ get ", url)
+	//	log.Println("lMDQ get ", url)
 	getlock.Lock()
 	defer getlock.Unlock()
-    body = getcache[url]
-    if body != nil {
-        log.Println("lMDQ got cached ", url)
-        return
-    }
+	body = getcache[url]
+	if body != nil {
+		//log.Println("lMDQ got cached ", url)
+		return
+	}
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -382,6 +380,6 @@ func Get(url string) (body []byte, err error) {
 	}
 	body, err = ioutil.ReadAll(resp.Body)
 	getcache[url] = body
-	log.Println("lMDQ downloaded ", url)
+	//	log.Println("lMDQ downloaded ", url)
 	return
 }

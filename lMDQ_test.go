@@ -7,13 +7,13 @@ import (
 )
 
 var (
-	hashes  =   []string{}
-    test_hub     = MDQ{url: "https://test-phph.test.lan/test-md/WAYF-HUB-PUBLIC.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
-    test_hub_ops = MDQ{url: "https://test-phph.test.lan/MDQ/HUB-OPS/entities/HUB-OPS.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
-    test_edugain = MDQ{url: "https://test-phph.test.lan/test-md/MEC.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
-    prod_hub     = MDQ{url: "https://phph.wayf.dk/md/wayf-hub.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
-    prod_hub_ops = MDQ{url: "https://phph.wayf.dk/md/HUB.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
-    prod_birk    = MDQ{url: "https://phph.wayf.dk/md/birk-idp-public.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
+	hashes       = []string{}
+	test_hub     = MDQ{url: "https://test-phph.test.lan/test-md/WAYF-HUB-PUBLIC.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
+	test_hub_ops = MDQ{url: "https://test-phph.test.lan/MDQ/HUB-OPS/entities/HUB-OPS.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
+	test_edugain = MDQ{url: "https://test-phph.test.lan/test-md/MEC.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
+	prod_hub     = MDQ{url: "https://phph.wayf.dk/md/wayf-hub.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
+	prod_hub_ops = MDQ{url: "https://phph.wayf.dk/md/HUB.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
+	prod_birk    = MDQ{url: "https://phph.wayf.dk/md/birk-idp-public.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
 )
 
 func TestMain(m *testing.M) {
@@ -43,20 +43,20 @@ func getBenchmarkHashes() {
 }
 
 func TestUpdate(t *testing.T) {
-    for _, md := range []MDQ{test_hub, test_hub_ops, test_edugain, prod_hub, prod_hub_ops, prod_birk} {
-       if err := md.Update(); err != nil {
-           log.Println("lMDQ error   ", err)
-       }
+	for _, md := range []MDQ{test_hub, test_hub_ops, test_edugain, prod_hub, prod_hub_ops, prod_birk} {
+		if err := md.Update(); err != nil {
+			log.Println("lMDQ error   ", err)
+		}
 	}
 	// Output: hi
 }
 
 func BenchmarkMDQ(b *testing.B) {
-    getBenchmarkHashes()
-    max := len(hashes)
+	getBenchmarkHashes()
+	max := len(hashes)
 
 	for i := 0; i < b.N; i++ {
-		hash := hashes[i % max]
+		hash := hashes[i%max]
 		_, _ = prod_hub_ops.MDQ("{sha1}" + hash)
 	}
 }
