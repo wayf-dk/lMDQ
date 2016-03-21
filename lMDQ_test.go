@@ -8,22 +8,17 @@ import (
 
 var (
 	hashes       = []string{}
-	test_hub     = MDQ{url: "https://test-phph.test.lan/test-md/WAYF-HUB-PUBLIC.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
-	test_hub_ops = MDQ{url: "https://test-phph.test.lan/MDQ/HUB-OPS/entities/HUB-OPS.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
-	test_edugain = MDQ{url: "https://test-phph.test.lan/test-md/MEC.xml", hash: "e0cff78934baa85a4a1b084dcb586fe6bb2f7619"}
-	prod_hub     = MDQ{url: "https://phph.wayf.dk/md/wayf-hub.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
-	prod_hub_ops = MDQ{url: "https://phph.wayf.dk/md/HUB.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
-	prod_birk    = MDQ{url: "https://phph.wayf.dk/md/birk-idp-public.xml", hash: "f328b1e2b9edeb416403ac70601bc1306f74a836"}
+	test_hub, test_hub_ops, test_edugain , prod_hub, prod_hub_ops, prod_birk *MDQ
 )
 
 func TestMain(m *testing.M) {
-	prod_hub.XOpen("prod_hub.mddb")
-	prod_hub_ops.XOpen("prod_hub_ops.mddb")
-	prod_birk.XOpen("prod_birk.mddb")
+	prod_hub, _ = Open("prod_hub.mddb")
+	prod_hub_ops, _ = Open("prod_hub_ops.mddb")
+	prod_birk, _ = Open("prod_birk.mddb")
 
-	test_hub.XOpen("test_hub.mddb")
-	test_hub_ops.XOpen("test_hub_ops.mddb")
-	test_edugain.XOpen("test_edugain.mddb")
+	test_hub, _ = Open("test_hub.mddb")
+	test_hub_ops, _ = Open("test_hub_ops.mddb")
+	test_edugain, _ = Open("test_edugain.mddb")
 
 	os.Exit(m.Run())
 }
@@ -42,13 +37,12 @@ func getBenchmarkHashes() {
 	}
 }
 
-func TestUpdate(t *testing.T) {
-	for _, md := range []MDQ{test_hub, test_hub_ops, test_edugain, prod_hub, prod_hub_ops, prod_birk} {
-		if err := md.Update(); err != nil {
-			log.Println("lMDQ error   ", err)
-		}
-	}
-	// Output: hi
+func TestAll(t *testing.T) {
+    xp, err := test_hub_ops.MDQ("")
+    if err != nil {
+        log.Fatalln(err)
+    }
+    log.Println(xp.Pp())
 }
 
 func BenchmarkMDQ(b *testing.B) {
