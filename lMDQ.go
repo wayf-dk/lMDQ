@@ -11,10 +11,10 @@
 		"select e.md, e.hash from entity e, lookup l where l.hash = $1 and l.entity_id_fk = e.id and e.validuntil >= $2"
 
     where $1 is the lowercase hex sha1 of the entityID or location without the {sha1} prefix
-    $2 is the feed and $3 is the current epoch.
+    $2 is the current epoch.
 
     to-do:
-        - caching interface
+        √ caching interface
 */
 
 package lMDQ
@@ -80,12 +80,11 @@ type (
 	MDQ struct {
 		db              *sql.DB
 		stmt            *sql.Stmt
-		url, hash, path string
+		Url, Hash, Path string
 	}
 
 	MdXp struct {
 		*gosaml.Xp
-		master  *MdXp
 		created time.Time
 	}
 )
@@ -114,25 +113,13 @@ func (xp *MdXp) Valid(duration time.Duration) bool {
 	return since < duration
 }
 
-func (mdq *MDQ) XOpen(path string) (mdqx *MDQ, err error) {
-	mdq.path = path
-	mdq.db, err = sql.Open("sqlite3", path)
-	if err != nil {
-		log.Println("opening mddb ", err)
-		return
-	}
-
-	mdq.stmt, err = mdq.db.Prepare(`select e.md from entity e, lookup l, validuntil v
-	where l.hash = $1 and l.entity_id_fk = e.id and v.validuntil >= $2`)
-	if err != nil {
-		return
-	}
-	return
+func Open(path string) (mdq *MDQ, err error) {
+    mdq = new(MDQ)
+    return mdq, mdq.Open(path)
 }
 
-func Open(path string) (mdq *MDQ, err error) {
-	mdq = new(MDQ)
-	mdq.path = path
+func (mdq *MDQ) Open(path string) (err error) {
+	mdq.Path = path
 	mdq.db, err = sql.Open("sqlite3", path)
 	if err != nil {
 		return
@@ -153,6 +140,13 @@ func Open(path string) (mdq *MDQ, err error) {
 // The hash can be used to decide if a cached dom object is still valid,
 // This might be an optimization as the database lookup is much faster that the parsing.
 func (mdq *MDQ) MDQ(key string) (xp *gosaml.Xp, err error) {
+    if key == "" {
+        return mdq.MDQAll()
+    }
+    return mdq.dbget(key, true)
+    }
+
+func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
 	k := key
 	const prefix = "{sha1}"
 	if strings.HasPrefix(key, prefix) {
@@ -178,17 +172,54 @@ func (mdq *MDQ) MDQ(key string) (xp *gosaml.Xp, err error) {
 		return
 	}
 	xp = gosaml.NewXp(xml)
-	mdxp := new(MdXp)
-	mdxp.Xp = xp
-	mdxp.created = time.Now()
+    if cache {
+	    mdxp := new(MdXp)
+	    mdxp.Xp = xp
+	    mdxp.created = time.Now()
+	    mdcache[key] = mdxp
+	}
+	return
+}
 
-	mdcache[key] = mdxp
+/**
+    One at a time - not that fast - only use for testing
+*/
+func (mdq *MDQ) MDQAll() (xp *gosaml.Xp, err error) {
+	recs, err := mdq.getEntityList()
+	if err != nil {
+		return
+	}
+	xp = gosaml.NewXp([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" />`))
+
+	for entityID, _ := range recs {
+	    ent, _ := mdq.dbget(entityID, false)
+        xp.DocGetRootElement().AddChild(xp.CopyNode(ent.DocGetRootElement(), 1))
+	}
+	return
+}
+/**
+    One at a time - not that fast - only use for testing
+    Filtered by xpath for testing purposes
+*/
+func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *gosaml.Xp, err error) {
+	recs, err := mdq.getEntityList()
+	if err != nil {
+		return
+	}
+	xp = gosaml.NewXp([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" />`))
+
+	for entityID, _ := range recs {
+	    ent, _ := mdq.dbget(entityID, false)
+	    if len(ent.Query(nil, xpathfilter)) > 0 {
+            xp.DocGetRootElement().AddChild(xp.CopyNode(ent.DocGetRootElement(), 1))
+        }
+	}
 	return
 }
 
 func (mdq *MDQ) Update() (err error) {
 	start := time.Now()
-	log.Println("lMDQ updating", mdq.url)
+	log.Println("lMDQ updating", mdq.Url)
 
 	_, err = mdq.db.Exec(lMDQSchema)
 	if err != nil {
@@ -200,7 +231,7 @@ func (mdq *MDQ) Update() (err error) {
 		return err
 	}
 	var md []byte
-	if md, err = Get(mdq.url); err != nil {
+	if md, err = Get(mdq.Url); err != nil {
 		return
 	}
 
@@ -222,8 +253,8 @@ func (mdq *MDQ) Update() (err error) {
 	}
 
 	ok := dom.VerifySignature(nil, key)
-	if ok != nil || keyname != mdq.hash {
-		return fmt.Errorf("Signature check failed. Signature %s, %s = %s", ok, keyname, mdq.hash)
+	if ok != nil || keyname != mdq.Hash {
+		return fmt.Errorf("Signature check failed. Signature %s, %s = %s", ok, keyname, mdq.Hash)
 	}
 
 	tx, err := mdq.db.Begin()
@@ -325,7 +356,7 @@ func (mdq *MDQ) Update() (err error) {
 		return
 	}
 
-	log.Printf("lMDQ finished new: %d updated: %d nochange: %d deleted: %d validUntil: %s duration: %.1f",
+	log.Printf("lMDQ finished %d new, %d updated, %d unchanged, %d deleted validUntil: %s duration: %.1f",
 		new, updated, nochange, deleted, time.Unix(validUntil, 0).Format(time.RFC3339), time.Since(start).Seconds())
 	return
 }
