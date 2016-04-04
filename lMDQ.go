@@ -80,7 +80,10 @@ type (
 	MDQ struct {
 		db              *sql.DB
 		stmt            *sql.Stmt
-		Url, Hash, Path string
+		Url, Hash, Path, MetadataSchemaPath string
+		Cache           map[string]*MdXp
+	    Lock            sync.Mutex
+	    Silent          bool
 	}
 
 	MdXp struct {
@@ -155,9 +158,9 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
 		key = hex.EncodeToString(gosaml.Hash(crypto.SHA1, key))
 	}
 
-	mdlock.Lock()
-	defer mdlock.Unlock()
-	cachedxp := mdcache[key]
+	mdq.Lock.Lock()
+	defer mdq.Lock.Unlock()
+	cachedxp := mdq.Cache[key]
 	if cachedxp != nil && cachedxp.Valid(cacheduration) {
 		xp = cachedxp.Xp.CpXp()
 		return
@@ -176,27 +179,11 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
 	    mdxp := new(MdXp)
 	    mdxp.Xp = xp
 	    mdxp.created = time.Now()
-	    mdcache[key] = mdxp
+	    mdq.Cache[key] = mdxp
 	}
 	return
 }
 
-/**
-    One at a time - not that fast - only use for testing
-*/
-func (mdq *MDQ) MDQAll() (xp *gosaml.Xp, err error) {
-	recs, err := mdq.getEntityList()
-	if err != nil {
-		return
-	}
-	xp = gosaml.NewXp([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" />`))
-
-	for entityID, _ := range recs {
-	    ent, _ := mdq.dbget(entityID, false)
-        xp.DocGetRootElement().AddChild(xp.CopyNode(ent.DocGetRootElement(), 1))
-	}
-	return
-}
 /**
     One at a time - not that fast - only use for testing
     Filtered by xpath for testing purposes
