@@ -15,6 +15,7 @@
 
     to-do:
         √ caching interface
+          invalidate cache ???
 */
 
 package lMDQ
@@ -26,6 +27,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+    "github.com/aryann/difflib"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wayf-dk/gosaml"
 	"io/ioutil"
@@ -38,14 +40,13 @@ import (
 )
 
 const (
-	metadataSchema = "/home/mz/src/github.com/wayf-dk/gosaml/schemas/saml-schema-metadata-2.0.xsd"
 	// pragma wal ???
 	lMDQSchema = `
 PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS entity
 (
     id INTEGER PRIMARY KEY,
-    entityid text not null,
+    entityid text not null unique,
     md text NOT NULL,
     hash text NOT NULL
 );
@@ -93,21 +94,46 @@ type (
 )
 
 var (
-	mdcache       map[string]*MdXp
-	mdlock        sync.Mutex
 	cacheduration = time.Minute * 1
 
 	indextargets = []string{
 		"./md:IDPSSODescriptor/md:SingleSignOnService[@Binding='urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect']/@Location",
 		"./md:SPSSODescriptor/md:AssertionConsumerService[@Binding='urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST']/@Location",
 	}
-	getcache map[string][]byte
-	getlock  sync.Mutex
 )
 
 func init() {
-	mdcache = make(map[string]*MdXp)
-	getcache = make(map[string][]byte)
+
+}
+
+func Cmp(feed1, feed2 MDQ) {
+    ents1, _ := feed1.getEntityList()
+    ents2, _ := feed2.getEntityList()
+//    len1 := len(ents1)
+    len2 := len(ents2)
+    seen := 0
+    for id, _ := range ents1 {
+        x1, _ := feed1.MDQ(id)
+        x2, _ := feed2.MDQ(id)
+        str1 := x1.Pp()
+        str2 := x2.Pp()
+        hash1 := hex.EncodeToString(gosaml.Hash(crypto.SHA1, str1))
+        hash2 := hex.EncodeToString(gosaml.Hash(crypto.SHA1, str2))
+        if hash1 == hash2 {
+            log.Println("OK ", id)
+        } else {
+            log.Println("NOT", id)
+            diffs := difflib.Diff(strings.Split(str1, "\n"), strings.Split(str2, "\n"))
+            for _, diff := range diffs {
+                if diff.Delta != difflib.Common {
+                    log.Println(diff)
+                }
+            }
+            fmt.Println()
+        }
+        seen++
+    }
+    log.Println("Number of entityies: ", seen, len2)
 }
 
 func (xp *MdXp) Valid(duration time.Duration) bool {
@@ -122,17 +148,13 @@ func Open(path string) (mdq *MDQ, err error) {
 }
 
 func (mdq *MDQ) Open(path string) (err error) {
+    mdq.Cache = make(map[string]*MdXp)
 	mdq.Path = path
 	mdq.db, err = sql.Open("sqlite3", path)
 	if err != nil {
 		return
 	}
 
-	mdq.stmt, err = mdq.db.Prepare(`select e.md from entity e, lookup l, validuntil v
-	where l.hash = $1 and l.entity_id_fk = e.id and v.validuntil >= $2`)
-	if err != nil {
-		return
-	}
 	return
 }
 
@@ -143,13 +165,18 @@ func (mdq *MDQ) Open(path string) (err error) {
 // The hash can be used to decide if a cached dom object is still valid,
 // This might be an optimization as the database lookup is much faster that the parsing.
 func (mdq *MDQ) MDQ(key string) (xp *gosaml.Xp, err error) {
-    if key == "" {
-        return mdq.MDQAll()
-    }
     return mdq.dbget(key, true)
-    }
+}
 
 func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
+    if mdq.stmt == nil {
+        mdq.stmt, err = mdq.db.Prepare(`select e.md from entity e, lookup l, validuntil v
+        where l.hash = $1 and l.entity_id_fk = e.id and v.validuntil >= $2`)
+        if err != nil {
+            return
+        }
+    }
+
 	k := key
 	const prefix = "{sha1}"
 	if strings.HasPrefix(key, prefix) {
@@ -193,11 +220,13 @@ func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *gosaml.Xp, err error) {
 	if err != nil {
 		return
 	}
+	log.Println(xpathfilter)
 	xp = gosaml.NewXp([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" />`))
 
 	for entityID, _ := range recs {
 	    ent, _ := mdq.dbget(entityID, false)
-	    if len(ent.Query(nil, xpathfilter)) > 0 {
+
+	    if xpathfilter == "" || len(ent.Query(nil, xpathfilter)) > 0 {
             xp.DocGetRootElement().AddChild(xp.CopyNode(ent.DocGetRootElement(), 1))
         }
 	}
@@ -218,13 +247,13 @@ func (mdq *MDQ) Update() (err error) {
 		return err
 	}
 	var md []byte
-	if md, err = Get(mdq.Url); err != nil {
+	if md, err = get(mdq.Url); err != nil {
 		return
 	}
 
 	dom := gosaml.NewXp(md)
 
-	if _, err := dom.SchemaValidate(metadataSchema); err != nil {
+	if _, err := dom.SchemaValidate(mdq.MetadataSchemaPath); err != nil {
 		log.Println("feed", "SchemaError")
 	}
 
@@ -281,9 +310,16 @@ func (mdq *MDQ) Update() (err error) {
 	validUntil := vu.Unix()
 
 	var new, updated, nochange, deleted int
+	seen := map[string]bool{}
+
 	entities := dom.Query(nil, "./md:EntityDescriptor")
 	for _, entity := range entities {
 		entityID := dom.Query1(entity, "@entityID")
+		if seen[entityID] {
+			log.Printf("lMDQ duplicate entityID: %s", entityID)
+			continue
+		}
+        seen[entityID] = true
 		md := gosaml.NewXpFromNode(entity).X2s()
 		rec := recs[entityID]
 		id := rec.id
@@ -293,7 +329,7 @@ func (mdq *MDQ) Update() (err error) {
 			delete(recs, entityID) // remove so it won't be deleted
 			nochange++
 			continue
-		} else if oldhash != "" { // update is delete + insert - then the cacading delete will also delete the potential stale lookup entries
+		} else if oldhash != "" { // update is delete + insert - then the cascading delete will also delete the potential stale lookup entries
 			_, err = entityDeleteStmt.Exec(rec.id)
 			if err != nil {
 				return
@@ -303,7 +339,9 @@ func (mdq *MDQ) Update() (err error) {
 			delete(recs, entityID) // updated - remove so it won't be deleted
 		} else {
 			new++
-			log.Printf("lMDQ new entityID: %s", entityID)
+			if !mdq.Silent {
+			    log.Printf("lMDQ new entityID: %s", entityID)
+			}
 		}
 		var res sql.Result
 		res, err = entityInsertStmt.Exec(entityID, md, hash)
@@ -321,7 +359,9 @@ func (mdq *MDQ) Update() (err error) {
 		for _, target := range indextargets {
 			locations := dom.Query(entity, target)
 			for i, location := range locations {
-				log.Println(i, dom.NodeGetContent(location))
+			    if !mdq.Silent {
+				    log.Println(i, dom.NodeGetContent(location))
+				}
 				_, err = lookupInsertStmt.Exec(hex.EncodeToString(gosaml.Hash(crypto.SHA1, dom.NodeGetContent(location))), id)
 				if err != nil {
 					return
@@ -373,15 +413,7 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 }
 
 // Get - insecure Get if https is used, doesn't matter for metadata as we check the signature anyway
-func Get(url string) (body []byte, err error) {
-	//	log.Println("lMDQ get ", url)
-	getlock.Lock()
-	defer getlock.Unlock()
-	body = getcache[url]
-	if body != nil {
-		//log.Println("lMDQ got cached ", url)
-		return
-	}
+func get(url string) (body []byte, err error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -397,7 +429,6 @@ func Get(url string) (body []byte, err error) {
 		return
 	}
 	body, err = ioutil.ReadAll(resp.Body)
-	getcache[url] = body
-	//	log.Println("lMDQ downloaded ", url)
 	return
 }
+
