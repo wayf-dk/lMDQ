@@ -34,6 +34,7 @@ import (
 	"log"
 	"net/http"
 	//"runtime/debug"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -120,20 +121,20 @@ func Cmp(feed1, feed2 MDQ) {
         hash1 := hex.EncodeToString(gosaml.Hash(crypto.SHA1, str1))
         hash2 := hex.EncodeToString(gosaml.Hash(crypto.SHA1, str2))
         if hash1 == hash2 {
-            log.Println("OK ", id)
+            fmt.Println("OK ", id)
         } else {
-            log.Println("NOT", id)
+            fmt.Println("NOT", id)
             diffs := difflib.Diff(strings.Split(str1, "\n"), strings.Split(str2, "\n"))
             for _, diff := range diffs {
                 if diff.Delta != difflib.Common {
-                    log.Println(diff)
+                    fmt.Println(diff)
                 }
             }
             fmt.Println()
         }
         seen++
     }
-    log.Println("Number of entityies: ", seen, len2)
+    fmt.Println("Number of entityies: ", seen, len2)
 }
 
 func (xp *MdXp) Valid(duration time.Duration) bool {
@@ -215,19 +216,30 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
     One at a time - not that fast - only use for testing
     Filtered by xpath for testing purposes
 */
-func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *gosaml.Xp, err error) {
+func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *gosaml.Xp, numberOfEntities int, err error) {
 	recs, err := mdq.getEntityList()
 	if err != nil {
 		return
 	}
-	log.Println(xpathfilter)
+
+    // get the entities into an ordered slice
+    index := make([]string, len(recs))
+    i := 0
+    for k, _ := range recs {
+        index[i] = k
+        i++
+    }
+    sort.Strings(index)
+
+	//log.Println(xpathfilter)
 	xp = gosaml.NewXp([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" />`))
 
-	for entityID, _ := range recs {
+	for _, entityID := range index {
 	    ent, _ := mdq.dbget(entityID, false)
 
 	    if xpathfilter == "" || len(ent.Query(nil, xpathfilter)) > 0 {
             xp.DocGetRootElement().AddChild(xp.CopyNode(ent.DocGetRootElement(), 1))
+            numberOfEntities++
         }
 	}
 	return
@@ -235,7 +247,7 @@ func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *gosaml.Xp, err error) {
 
 func (mdq *MDQ) Update() (err error) {
 	start := time.Now()
-	log.Println("lMDQ updating", mdq.Url)
+	log.Println("lMDQ updating", mdq.Url, mdq.Path)
 
 	_, err = mdq.db.Exec(lMDQSchema)
 	if err != nil {
