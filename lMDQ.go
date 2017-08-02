@@ -29,10 +29,12 @@ import (
 	"fmt"
     "github.com/aryann/difflib"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/wayf-dk/goxml"
 	"github.com/wayf-dk/gosaml"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	//"runtime/debug"
 	"sort"
 	"strings"
@@ -89,7 +91,7 @@ type (
 	}
 
 	MdXp struct {
-		*gosaml.Xp
+		*goxml.Xp
 		created time.Time
 	}
 )
@@ -116,10 +118,10 @@ func Cmp(feed1, feed2 MDQ) {
     for id, _ := range ents1 {
         x1, _ := feed1.MDQ(id)
         x2, _ := feed2.MDQ(id)
-        str1 := x1.Pp()
-        str2 := x2.Pp()
-        hash1 := hex.EncodeToString(gosaml.Hash(crypto.SHA1, str1))
-        hash2 := hex.EncodeToString(gosaml.Hash(crypto.SHA1, str2))
+        str1 := x1.Doc.Dump(true)
+        str2 := x2.Doc.Dump(true)
+        hash1 := hex.EncodeToString(goxml.Hash(crypto.SHA1, str1))
+        hash2 := hex.EncodeToString(goxml.Hash(crypto.SHA1, str2))
         if hash1 == hash2 {
             fmt.Println("OK ", id)
         } else {
@@ -134,7 +136,7 @@ func Cmp(feed1, feed2 MDQ) {
         }
         seen++
     }
-    fmt.Println("Number of entityies: ", seen, len2)
+    fmt.Println("Number of entities: ", seen, len2)
 }
 
 func (xp *MdXp) Valid(duration time.Duration) bool {
@@ -165,11 +167,11 @@ func (mdq *MDQ) Open(path string) (err error) {
 // and the metadata and a hash/etag over the content if it is.
 // The hash can be used to decide if a cached dom object is still valid,
 // This might be an optimization as the database lookup is much faster that the parsing.
-func (mdq *MDQ) MDQ(key string) (xp *gosaml.Xp, err error) {
+func (mdq *MDQ) MDQ(key string) (xp *goxml.Xp, err error) {
     return mdq.dbget(key, true)
 }
 
-func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
+func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
     if mdq.stmt == nil {
         mdq.stmt, err = mdq.db.Prepare(`select e.md from entity e, lookup l, validuntil v
         where l.hash = $1 and l.entity_id_fk = e.id and v.validuntil >= $2`)
@@ -183,7 +185,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
 	if strings.HasPrefix(key, prefix) {
 		key = key[6:]
 	} else {
-		key = hex.EncodeToString(gosaml.Hash(crypto.SHA1, key))
+		key = hex.EncodeToString(goxml.Hash(crypto.SHA1, key))
 	}
 
 	mdq.Lock.Lock()
@@ -202,7 +204,8 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
 		//debug.PrintStack()
 		return
 	}
-	xp = gosaml.NewXp(xml)
+//	xp = goxml.NewXp((string)(gosaml.Inflate(xml)))
+	xp = goxml.NewXp(string(xml))
     if cache {
 	    mdxp := new(MdXp)
 	    mdxp.Xp = xp
@@ -216,7 +219,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *gosaml.Xp, err error) {
     One at a time - not that fast - only use for testing
     Filtered by xpath for testing purposes
 */
-func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *gosaml.Xp, numberOfEntities int, err error) {
+func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *goxml.Xp, numberOfEntities int, err error) {
 	recs, err := mdq.getEntityList()
 	if err != nil {
 		return
@@ -232,17 +235,42 @@ func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *gosaml.Xp, numberOfEntities i
     sort.Strings(index)
 
 	//log.Println(xpathfilter)
-	xp = gosaml.NewXp([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" />`))
+	xp = goxml.NewXp(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" />`)
 
+    root, _ := xp.Doc.DocumentElement()
 	for _, entityID := range index {
 	    ent, _ := mdq.dbget(entityID, false)
 
 	    if xpathfilter == "" || len(ent.Query(nil, xpathfilter)) > 0 {
-            xp.DocGetRootElement().AddChild(xp.CopyNode(ent.DocGetRootElement(), 1))
+	        entity, _ := ent.Doc.DocumentElement()
+            root.AddChild(xp.CopyNode(entity, 1))
             numberOfEntities++
         }
 	}
 	return
+}
+
+func (mdq *MDQ) xUpdate() (err error) {
+	start := time.Now()
+	log.Println("lMDQ updating", mdq.Url, mdq.Path)
+	var md []byte
+	if md, err = get(mdq.Url); err != nil {
+		return
+	}
+
+	fp, err := os.OpenFile(mdq.Path, os.O_RDWR|os.O_CREATE, os.ModePerm)
+
+	if err != nil {
+		return err
+	}
+
+	defer fp.Close()
+
+	_, err = fp.Write(md)
+
+	log.Printf("lMDQ finished duration: %.1f", time.Since(start).Seconds())
+
+	return err
 }
 
 func (mdq *MDQ) Update() (err error) {
@@ -263,18 +291,19 @@ func (mdq *MDQ) Update() (err error) {
 		return
 	}
 
-	dom := gosaml.NewXp(md)
+	dom := goxml.NewXp(string(md))
 
-	if _, err := dom.SchemaValidate(mdq.MetadataSchemaPath); err != nil {
-		log.Println("feed", "SchemaError")
+	if errs, err := dom.SchemaValidate(mdq.MetadataSchemaPath); err != nil {
+		log.Println("feed", "SchemaError", err, errs)
+		return err
 	}
 
-	certificate := dom.Query(nil, "/md:EntitiesDescriptor/ds:Signature/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
+	certificate := dom.Query(nil, "/*/ds:Signature/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
 	if len(certificate) != 1 {
 		err = errors.New("Metadata not signed")
 		return
 	}
-	keyname, key, err := gosaml.PublicKeyInfo(dom.NodeGetContent(certificate[0]))
+	keyname, key, err := gosaml.PublicKeyInfo(certificate[0].NodeValue())
 
 	if err != nil {
 		return
@@ -324,7 +353,7 @@ func (mdq *MDQ) Update() (err error) {
 	var new, updated, nochange, deleted int
 	seen := map[string]bool{}
 
-	entities := dom.Query(nil, "./md:EntityDescriptor")
+	entities := dom.Query(nil, "./md:EntityDescriptor | /md:EntityDescriptor")
 	for _, entity := range entities {
 		entityID := dom.Query1(entity, "@entityID")
 		if seen[entityID] {
@@ -332,10 +361,10 @@ func (mdq *MDQ) Update() (err error) {
 			continue
 		}
         seen[entityID] = true
-		md := gosaml.NewXpFromNode(entity).X2s()
+		md := goxml.NewXpFromNode(entity).Doc.Dump(false)
 		rec := recs[entityID]
 		id := rec.id
-		hash := hex.EncodeToString(gosaml.Hash(crypto.SHA1, md))
+		hash := hex.EncodeToString(goxml.Hash(crypto.SHA1, md))
 		oldhash := rec.hash
 		if rec.hash == hash { // no changes
 			delete(recs, entityID) // remove so it won't be deleted
@@ -363,7 +392,7 @@ func (mdq *MDQ) Update() (err error) {
 
 		id, _ = res.LastInsertId()
 
-		_, err = lookupInsertStmt.Exec(hex.EncodeToString(gosaml.Hash(crypto.SHA1, entityID)), id)
+		_, err = lookupInsertStmt.Exec(hex.EncodeToString(goxml.Hash(crypto.SHA1, entityID)), id)
 		if err != nil {
 			return
 		}
@@ -372,9 +401,9 @@ func (mdq *MDQ) Update() (err error) {
 			locations := dom.Query(entity, target)
 			for i, location := range locations {
 			    if !mdq.Silent {
-				    log.Println(i, dom.NodeGetContent(location))
+				    log.Println(i, location.NodeValue())
 				}
-				_, err = lookupInsertStmt.Exec(hex.EncodeToString(gosaml.Hash(crypto.SHA1, dom.NodeGetContent(location))), id)
+				_, err = lookupInsertStmt.Exec(hex.EncodeToString(goxml.Hash(crypto.SHA1, location.NodeValue())), id)
 				if err != nil {
 					return
 				}

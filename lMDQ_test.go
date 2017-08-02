@@ -42,7 +42,7 @@ func TestAll(t *testing.T) {
     if err != nil {
         log.Fatalln(err)
     }
-    log.Println(xp.Pp())
+    log.Println(xp.Doc.Dump(true))
 }
 
 func BenchmarkMDQ(b *testing.B) {
