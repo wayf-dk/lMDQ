@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	hashes       = []string{}
-	test_hub, test_hub_ops, test_edugain , prod_hub, prod_hub_ops, prod_birk *MDQ
+	hashes                                                                  = []string{}
+	test_hub, test_hub_ops, test_edugain, prod_hub, prod_hub_ops, prod_birk *MDQ
 )
 
 func TestMain(m *testing.M) {
@@ -38,11 +38,11 @@ func getBenchmarkHashes() {
 }
 
 func TestAll(t *testing.T) {
-    xp, err := test_hub_ops.MDQ("")
-    if err != nil {
-        log.Fatalln(err)
-    }
-    log.Println(xp.Doc.Dump(true))
+	xp, err := test_hub_ops.MDQ("")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	log.Println(xp.Doc.Dump(true))
 }
 
 func BenchmarkMDQ(b *testing.B) {
