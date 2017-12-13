@@ -69,7 +69,7 @@ func (mdq *MDQ) Open() (err error) {
 	mdq.Cache = make(map[string]*MdXp)
 	mdq.db, err = sql.Open("sqlite3", mdq.Path)
 	if err != nil {
-	    return
+		return
 	}
 	err = mdq.db.Ping()
 	return
