@@ -27,6 +27,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wayf-dk/gosaml"
 	"github.com/wayf-dk/goxml"
+	"github.com/y0ssar1an/q"
 	"sort"
 	"strings"
 	"sync"
@@ -56,7 +57,8 @@ type (
 )
 
 var (
-	cacheduration = time.Minute * 1
+	cacheduration = time.Minute * 60
+	_             = q.Q
 )
 
 func (xp *MdXp) Valid(duration time.Duration) bool {
@@ -99,7 +101,6 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 	} else {
 		key = hex.EncodeToString(goxml.Hash(crypto.SHA1, key))
 	}
-
 	mdq.Lock.Lock()
 	defer mdq.Lock.Unlock()
 	cachedxp := mdq.Cache[key]
