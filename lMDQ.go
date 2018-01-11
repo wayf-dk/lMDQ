@@ -21,7 +21,7 @@
 package lMDQ
 
 import (
-	"crypto"
+	"crypto/sha1"
 	"database/sql"
 	"encoding/hex"
 	_ "github.com/mattn/go-sqlite3"
@@ -99,7 +99,9 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 	if strings.HasPrefix(key, "{sha1}") {
 		key = key[6:]
 	} else {
-		key = hex.EncodeToString(goxml.Hash(crypto.SHA1, key))
+	//	key = hex.EncodeToString(goxml.Hash(crypto.SHA1, key))
+		hash := sha1.Sum([]byte(key))
+	    key = hex.EncodeToString(append(hash[:]))
 	}
 	mdq.Lock.Lock()
 	defer mdq.Lock.Unlock()
