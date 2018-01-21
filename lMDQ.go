@@ -68,6 +68,8 @@ func (xp *MdXp) Valid(duration time.Duration) bool {
 }
 
 func (mdq *MDQ) Open() (err error) {
+	mdq.Lock.Lock()
+	defer mdq.Lock.Unlock()
 	mdq.Cache = make(map[string]*MdXp)
 	mdq.db, err = sql.Open("sqlite3", mdq.Path)
 	if err != nil {
@@ -88,6 +90,8 @@ func (mdq *MDQ) MDQ(key string) (xp *goxml.Xp, err error) {
 }
 
 func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
+	mdq.Lock.Lock()
+	defer mdq.Lock.Unlock()
 	if mdq.stmt == nil {
 		mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where l.hash = ? and l.entity_id_fk = e.id")
 		if err != nil {
@@ -103,8 +107,6 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 		hash := sha1.Sum([]byte(key))
 	    key = hex.EncodeToString(append(hash[:]))
 	}
-	mdq.Lock.Lock()
-	defer mdq.Lock.Unlock()
 	cachedxp := mdq.Cache[key]
 	if cachedxp != nil && cachedxp.Valid(cacheduration) {
 		xp = cachedxp.Xp.CpXp()
