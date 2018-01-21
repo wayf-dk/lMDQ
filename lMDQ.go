@@ -75,7 +75,10 @@ func (mdq *MDQ) Open() (err error) {
 	if err != nil {
 		return
 	}
-	err = mdq.db.Ping()
+    mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where l.hash = ? and l.entity_id_fk = e.id")
+    if err != nil {
+        return
+    }
 	return
 }
 
@@ -92,18 +95,11 @@ func (mdq *MDQ) MDQ(key string) (xp *goxml.Xp, err error) {
 func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 	mdq.Lock.Lock()
 	defer mdq.Lock.Unlock()
-	if mdq.stmt == nil {
-		mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where l.hash = ? and l.entity_id_fk = e.id")
-		if err != nil {
-			return
-		}
-	}
 
 	k := key
 	if strings.HasPrefix(key, "{sha1}") {
 		key = key[6:]
 	} else {
-	//	key = hex.EncodeToString(goxml.Hash(crypto.SHA1, key))
 		hash := sha1.Sum([]byte(key))
 	    key = hex.EncodeToString(append(hash[:]))
 	}
