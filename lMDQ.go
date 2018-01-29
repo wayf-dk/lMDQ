@@ -75,10 +75,10 @@ func (mdq *MDQ) Open() (err error) {
 	if err != nil {
 		return
 	}
-    mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where l.hash = ? and l.entity_id_fk = e.id")
-    if err != nil {
-        return
-    }
+	mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where l.hash = ? and l.entity_id_fk = e.id")
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -101,7 +101,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 		key = key[6:]
 	} else {
 		hash := sha1.Sum([]byte(key))
-	    key = hex.EncodeToString(append(hash[:]))
+		key = hex.EncodeToString(append(hash[:]))
 	}
 	cachedxp := mdq.Cache[key]
 	if cachedxp != nil && cachedxp.Valid(cacheduration) {
