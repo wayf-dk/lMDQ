@@ -75,7 +75,8 @@ func (mdq *MDQ) Open() (err error) {
 	if err != nil {
 		return
 	}
-	mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where l.hash = ? and l.entity_id_fk = e.id")
+	// This is supposed to be a very smart wayf do to prefix search - keep an eye on wheather a 10 char prefix ie. using 40 bits is enough
+	mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where ? < l.hash||'z' and l.hash||'z' <= ? and l.entity_id_fk = e.id")
 	if err != nil {
 		return
 	}
@@ -103,6 +104,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 		hash := sha1.Sum([]byte(key))
 		key = hex.EncodeToString(append(hash[:]))
 	}
+	key = key[:10] // only use the first 10 chars for key
 	cachedxp := mdq.Cache[key]
 	if cachedxp != nil && cachedxp.Valid(cacheduration) {
 		xp = cachedxp.Xp.CpXp()
@@ -110,7 +112,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 	}
 
 	var xml []byte
-	err = mdq.stmt.QueryRow(key).Scan(&xml)
+	err = mdq.stmt.QueryRow(key, key+"z").Scan(&xml)
 	switch {
 	case err == sql.ErrNoRows:
 		err = goxml.Wrap(err, "err:Metadata not found", "key:"+k, "table:"+mdq.Table)
