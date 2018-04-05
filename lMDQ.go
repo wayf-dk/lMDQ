@@ -24,6 +24,7 @@ import (
 	"crypto/sha1"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wayf-dk/gosaml"
 	"github.com/wayf-dk/goxml"
@@ -57,8 +58,9 @@ type (
 )
 
 var (
-	cacheduration = time.Minute * 60
-	_             = q.Q
+	cacheduration         = time.Minute * 60
+	_                     = q.Q
+	MetaDataNotFoundError = errors.New("Metadata not found")
 )
 
 func (xp *MdXp) Valid(duration time.Duration) bool {
@@ -115,7 +117,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 	err = mdq.stmt.QueryRow(key, key+"z").Scan(&xml)
 	switch {
 	case err == sql.ErrNoRows:
-		err = goxml.Wrap(err, "err:Metadata not found", "key:"+k, "table:"+mdq.Table)
+		err = goxml.Wrap(MetaDataNotFoundError, "err:Metadata not found", "key:"+k, "table:"+mdq.Table)
 		return
 	case err != nil:
 		return
