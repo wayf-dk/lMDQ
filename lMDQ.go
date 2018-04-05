@@ -145,7 +145,7 @@ func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *goxml.Xp, numberOfEntities in
 	// get the entities into an ordered slice
 	index := make([]string, len(recs))
 	i := 0
-	for k, _ := range recs {
+	for k := range recs {
 		index[i] = k
 		i++
 	}
