@@ -77,7 +77,7 @@ func (mdq *MDQ) Open() (err error) {
 	if err != nil {
 		return
 	}
-	// This is supposed to be a very smart wayf do to prefix search - keep an eye on wheather a 10 char prefix ie. using 40 bits is enough
+	// This is supposed to be a very smart wayf do to prefix search - keep an eye on whether a 10 char prefix ie. using 40 bits is enough
 	mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where ? < l.hash||'z' and l.hash||'z' <= ? and l.entity_id_fk = e.id")
 	if err != nil {
 		return
