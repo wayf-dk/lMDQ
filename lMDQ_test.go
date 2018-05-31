@@ -27,10 +27,10 @@ func printHashedDom(xp *goxml.Xp) {
 
 // Need to change Path. So it should work for everyone.
 func TestMain(m *testing.M) {
-	Md.Hub = &MDQ{Path: "file:/home/mekhan/wayfhybrid/hybrid-metadata-test.mddb?mode=ro", Table: "HYBRID_HUB"}
-	Md.Internal = &MDQ{Path: "file:/home/mekhan/wayfhybrid/hybrid-metadata.mddb?mode=ro", Table: "HYBRID_INTERNAL"}
-	Md.ExternalIdP = &MDQ{Path: "file:/home/mekhan/wayfhybrid/hybrid-metadata-test.mddb?mode=ro", Table: "HYBRID_EXTERNAL_IDP"}
-	Md.ExternalSP = &MDQ{Path: "file:/home/mekhan/wayfhybrid/hybrid-metadata.mddb?mode=ro", Table: "HYBRID_EXTERNAL_SP"}
+	Md.Hub = &MDQ{Path: "file:testdata/test-metadata.mddb?mode=ro", Table: "HYBRID_HUB"}
+	Md.Internal = &MDQ{Path: "file:testdata/test-metadata.mddb?mode=ro", Table: "HYBRID_INTERNAL"}
+	Md.ExternalIdP = &MDQ{Path: "file:testdata/test-metadata.mddb?mode=ro", Table: "HYBRID_EXTERNAL_IDP"}
+	Md.ExternalSP = &MDQ{Path: "file:testdata/test-metadata.mddb?mode=ro", Table: "HYBRID_EXTERNAL_SP"}
 
 	for _, md := range []gosaml.Md{Md.Hub, Md.Internal, Md.ExternalIdP, Md.ExternalSP} {
 		err := md.(*MDQ).Open()
@@ -42,35 +42,35 @@ func TestMain(m *testing.M) {
 }
 
 func ExampleMDQ() {
-	extMetadata, _ := Md.ExternalIdP.MDQ("https://aai-logon.switch.ch/idp/shibboleth")
+	extMetadata, _ := Md.ExternalIdP.MDQ("https://birk.wayf.dk/birk.php/orphanage.wayf.dk")
 	printHashedDom(extMetadata)
-	intMetadata, _ := Md.Internal.MDQ("https://wayfsp.wayf.dk")
+	intMetadata, _ := Md.Internal.MDQ("https://wayf.aau.dk")
 	printHashedDom(intMetadata)
 	hubMetadata, _ := Md.Hub.MDQ("https://wayf.wayf.dk")
 	printHashedDom(hubMetadata)
 	// Output:
-	// HOuViozZYV3I9xTnCTMlpRfrAiU=
-	// g2R+ZRYDc+mrY6mvgMKaFyn4M/0=
-	// bHo3f2bGLC3YWq16SgancRECE04=
+	// yo8u3VPVo5vgPg+0WazNE6Dhd24=
+	// umTNPHT/1/jUYF7zVjBFP3CCFtY=
+	// OnvR35f3xX+93gu2oIT8stFU8Xc=
 }
 
 func ExampleNoMetadata() {
-	_, err := Md.ExternalIdP.MDQ("https://attribute-viewer.aai.switch.ch/interfederation-test/shibboleth")
+	_, err := Md.ExternalIdP.MDQ("https://exampple.com")
 	fmt.Println(err)
 	// Output:
-	// ["cause:Metadata not found","err:Metadata not found","key:https://attribute-viewer.aai.switch.ch/interfederation-test/shibboleth","table:HYBRID_EXTERNAL_IDP"]
+	// ["cause:Metadata not found","err:Metadata not found","key:https://exampple.com","table:HYBRID_EXTERNAL_IDP"]
 }
 
 func ExampleDbget() {
-	extMetadata, _ := Md.ExternalIdP.(*MDQ).dbget("https://aai-logon.switch.ch/idp/shibboleth", true)
+	extMetadata, _ := Md.ExternalIdP.(*MDQ).dbget("https://birk.wayf.dk/birk.php/sso.sdu.dk/wayf", true)
 	printHashedDom(extMetadata)
 	// Output:
-	// HOuViozZYV3I9xTnCTMlpRfrAiU=
+	// q+7HfLzgSYoreRyWO+L3uyHgAVU=
 }
 
 func ExampleMDQFilter() {
-	_, numberOfTestSPs, _ := Md.Internal.(*MDQ).MDQFilter("/*[not(contains(@entityID, 'birk.wayf.dk/birk.php'))]/*/wayf:wayf[not(wayf:IDPList!='') and wayf:redirect.validate='']/../../md:SPSSODescriptor/..")
+	_, numberOfTestSPs, _ := Md.Internal.(*MDQ).MDQFilter("/*[not(contains(@entityID, 'https://wayf.aau.dk'))]/*/wayf:wayf[not(wayf:IDPList!='') and wayf:redirect.validate='']/../../md:SPSSODescriptor/..")
 	fmt.Println(numberOfTestSPs)
 	// Output:
-	// 121
+	// 0
 }
