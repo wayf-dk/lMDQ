@@ -58,7 +58,6 @@ type (
 
 var (
 	cacheduration         = time.Minute * 60
-	_                     = q.Q
 	MetaDataNotFoundError = errors.New("Metadata not found")
 )
 
