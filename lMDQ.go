@@ -1,4 +1,4 @@
-/*  lMDQ is a MDQ server that caches metadata locally so it's local clients can lookup
+/*  lMDQ is a MDQ server that caches metadata locally so it's local clients can lookup x
     pre-checked metadata and not depend on a working connection to a remote MDQ server.
 
     It uses SQLite as it's datastore and allows lookup by either entityID or Location.
@@ -28,7 +28,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wayf-dk/gosaml"
 	"github.com/wayf-dk/goxml"
-	"github.com/y0ssar1an/q"
 	"sort"
 	"strings"
 	"sync"
