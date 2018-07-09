@@ -36,13 +36,13 @@ import (
 )
 
 type (
-    // EntityRec refers entity info
+	// EntityRec refers entity info
 	EntityRec struct {
 		id       int64
 		entityid string
 		hash     string
 	}
-    // MDQ refers to metadata query
+	// MDQ refers to metadata query
 	MDQ struct {
 		db    *sql.DB
 		stmt  *sql.Stmt
@@ -51,7 +51,7 @@ type (
 		Lock  sync.Mutex
 		Table string
 	}
-    // MdXp refers to check validity
+	// MdXp refers to check validity
 	MdXp struct {
 		*goxml.Xp
 		created time.Time
@@ -59,7 +59,7 @@ type (
 )
 
 var (
-	cacheduration         = time.Minute * 60
+	cacheduration = time.Minute * 60
 	// MetaDataNotFoundError refers to error
 	MetaDataNotFoundError = errors.New("Metadata not found")
 )
