@@ -36,13 +36,13 @@ import (
 )
 
 type (
-	// EntityRec refers entity info
+    // EntityRec refers entity info
 	EntityRec struct {
 		id       int64
 		entityid string
 		hash     string
 	}
-	// MDQ refers to metadata query
+    // MDQ refers to metadata query
 	MDQ struct {
 		db    *sql.DB
 		stmt  *sql.Stmt
@@ -51,7 +51,7 @@ type (
 		Lock  sync.Mutex
 		Table string
 	}
-	// MdXp refers to check validity
+    // MdXp refers to check validity
 	MdXp struct {
 		*goxml.Xp
 		created time.Time
@@ -59,19 +59,19 @@ type (
 )
 
 var (
-	cacheduration = time.Minute * 60
+	cacheduration         = time.Minute * 60
 	// MetaDataNotFoundError refers to error
 	MetaDataNotFoundError = errors.New("Metadata not found")
 )
 
-// MdXp.Valid refers to check the validity of metadata
+// Valid refers to check the validity of metadata
 func (xp *MdXp) Valid(duration time.Duration) bool {
 	since := time.Since(xp.created)
 	//log.Println(since, duration, since  < duration)
 	return since < duration
 }
 
-// MDQ.Open refers to open metadata file
+// Open refers to open metadata file
 func (mdq *MDQ) Open() (err error) {
 	mdq.Lock.Lock()
 	defer mdq.Lock.Unlock()
@@ -137,7 +137,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 	return
 }
 
-// MDQ.MDQFilter refers Filtering by xpath for testing purposes
+// MDQFilter refers Filtering by xpath for testing purposes
 func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *goxml.Xp, numberOfEntities int, err error) {
 	recs, err := mdq.getEntityList()
 	if err != nil {
