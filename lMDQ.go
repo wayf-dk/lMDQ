@@ -29,6 +29,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wayf-dk/gosaml"
 	"github.com/wayf-dk/goxml"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -44,16 +45,17 @@ type (
 	}
 	// MDQ refers to metadata query
 	MDQ struct {
-		db    *sql.DB
-		stmt  *sql.Stmt
-		Path  string
-		Cache map[string]*MdXp
-		Lock  sync.Mutex
-		Table string
+		db                *sql.DB
+		stmt              *sql.Stmt
+		Path              string
+		Cache             map[string]*MdXp
+		Lock              sync.RWMutex
+		Table, Rev, Short string
 	}
 	// MdXp refers to check validity
 	MdXp struct {
 		*goxml.Xp
+		xml     []byte
 		created time.Time
 	}
 )
@@ -62,6 +64,7 @@ var (
 	cacheduration = time.Minute * 60
 	// MetaDataNotFoundError refers to error
 	MetaDataNotFoundError = errors.New("Metadata not found")
+	hexChars              = regexp.MustCompile("^[a-fA-F0-9]+$")
 )
 
 // Valid refers to check the validity of metadata
@@ -83,8 +86,8 @@ func (mdq *MDQ) Open() (err error) {
 	if err != nil {
 		return
 	}
-	// This is supposed to be a very smart wayf do to prefix search - keep an eye on whether a 10 char prefix ie. using 40 bits is enough
 	mdq.stmt, err = mdq.db.Prepare("select e.md md from entity_" + mdq.Table + " e, lookup_" + mdq.Table + " l where ? < l.hash||'z' and l.hash||'z' <= ? and l.entity_id_fk = e.id")
+	// This is supposed to be a very smart wayf do to prefix search - keep an eye on whether a 10 char prefix ie. using 40 bits is enough
 	if err != nil {
 		return
 	}
@@ -98,28 +101,35 @@ func (mdq *MDQ) Open() (err error) {
 // The hash can be used to decide if a cached dom object is still valid,
 // This might be an optimization as the database lookup is much faster that the parsing.
 func (mdq *MDQ) MDQ(key string) (xp *goxml.Xp, err error) {
+	xp, _, err = mdq.dbget(key, true)
+	return
+}
+
+func (mdq *MDQ) WebMDQ(key string) (xp *goxml.Xp, xml []byte, err error) {
 	return mdq.dbget(key, true)
 }
 
-func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
-	mdq.Lock.Lock()
-	defer mdq.Lock.Unlock()
-
+func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, xml []byte, err error) {
 	k := key
 	if strings.HasPrefix(key, "{sha1}") {
 		key = key[6:]
+	} else if hexChars.MatchString(key) {
+
 	} else {
 		hash := sha1.Sum([]byte(key))
 		key = hex.EncodeToString(append(hash[:]))
 	}
 	key = key[:10] // only use the first 10 chars for key
+	mdq.Lock.RLock()
 	cachedxp := mdq.Cache[key]
 	if cachedxp != nil && cachedxp.Valid(cacheduration) {
 		xp = cachedxp.Xp.CpXp()
+		xml = cachedxp.xml
+    	mdq.Lock.RUnlock()
 		return
 	}
+	mdq.Lock.RUnlock()
 
-	var xml []byte
 	err = mdq.stmt.QueryRow(key, key+"z").Scan(&xml)
 	switch {
 	case err == sql.ErrNoRows:
@@ -134,8 +144,11 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 	if cache {
 		mdxp := new(MdXp)
 		mdxp.Xp = xp
+		mdxp.xml = xml
 		mdxp.created = time.Now()
+	    mdq.Lock.Lock()
 		mdq.Cache[key] = mdxp
+	    mdq.Lock.Unlock()
 	}
 	return
 }
@@ -161,7 +174,7 @@ func (mdq *MDQ) MDQFilter(xpathfilter string) (xp *goxml.Xp, numberOfEntities in
 
 	root, _ := xp.Doc.DocumentElement()
 	for _, entityID := range index {
-		ent, _ := mdq.dbget(entityID, false)
+		ent, _, _ := mdq.dbget(entityID, false)
 
 		if xpathfilter == "" || len(ent.Query(nil, xpathfilter)) > 0 {
 			entity, _ := ent.Doc.DocumentElement()
