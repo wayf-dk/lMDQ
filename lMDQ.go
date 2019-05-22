@@ -122,13 +122,12 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, xml []byte, err err
 	key = key[:10] // only use the first 10 chars for key
 	mdq.Lock.RLock()
 	cachedxp := mdq.Cache[key]
+	mdq.Lock.RUnlock()
 	if cachedxp != nil && cachedxp.Valid(cacheduration) {
 		xp = cachedxp.Xp.CpXp()
 		xml = cachedxp.xml
-    	mdq.Lock.RUnlock()
 		return
 	}
-	mdq.Lock.RUnlock()
 
 	err = mdq.stmt.QueryRow(key, key+"z").Scan(&xml)
 	switch {
