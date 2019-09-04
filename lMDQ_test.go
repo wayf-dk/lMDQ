@@ -62,7 +62,7 @@ func ExampleNoMetadata() {
 }
 
 func ExampleDbget() {
-	extMetadata, _ := Md.ExternalIdP.(*MDQ).dbget("https://birk.wayf.dk/birk.php/sso.sdu.dk/wayf", true)
+	extMetadata, _, _ := Md.ExternalIdP.(*MDQ).dbget("https://birk.wayf.dk/birk.php/sso.sdu.dk/wayf", true)
 	printHashedDom(extMetadata)
 	// Output:
 	// q+7HfLzgSYoreRyWO+L3uyHgAVU=
