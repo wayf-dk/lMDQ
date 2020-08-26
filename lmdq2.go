@@ -1,23 +1,6 @@
 // +build testmdq
 
-/*  lMDQ is a MDQ server that caches metadata locally so it's local clients can lookup
-    pre-checked metadata and not depend on a working connection to a remote MDQ server.
-
-    It uses SQLite as it's datastore and allows lookup by either entityID or Location.
-    The latter is used by WAYF for it's mass hosting services BIRK and KRIB.
-
-    It can also be used as a library for just looking up metadata inside a go program.
-
-    Or a client can use the SQLite database directly using the following query:
-
-		"select e.md, e.hash from entity e, lookup l where l.hash = $1 and l.entity_id_fk = e.id and e.validuntil >= $2"
-
-    where $1 is the lowercase hex sha1 of the entityID or location without the {sha1} prefix
-    $2 is the current epoch.
-
-    to-do:
-        √ caching interface
-          invalidate cache ???
+/* lmdq is a simple interface for requestin metadata from a real MDQ server
 */
 
 package lmdq
