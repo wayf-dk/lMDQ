@@ -1,3 +1,3 @@
 module github.com/wayf-dk/lmdq
 
-go 1.15
+go 1.16
