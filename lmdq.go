@@ -27,9 +27,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/wayf-dk/gosaml"
-	"github.com/wayf-dk/goxml"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -39,6 +36,9 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/wayf-dk/gosaml"
+	"github.com/wayf-dk/goxml"
 	"x.config"
 )
 
@@ -51,11 +51,11 @@ type (
 	}
 	// MDQ refers to metadata query
 	MDQ struct {
-	    config.MdDb
-		db                     *sql.DB
-		stmt                   *sql.Stmt
-		Cache                  map[string]*MdXp
-		Lock                   sync.RWMutex
+		config.MdDb
+		db    *sql.DB
+		stmt  *sql.Stmt
+		Cache map[string]*MdXp
+		Lock  sync.RWMutex
 	}
 	// MdXp refers to check validity
 	MdXp struct {
