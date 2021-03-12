@@ -30,6 +30,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wayf-dk/gosaml"
 	"github.com/wayf-dk/goxml"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -79,11 +82,16 @@ func (xp *MdXp) Valid(duration time.Duration) bool {
 func (mdq *MDQ) Open() (err error) {
 	mdq.Lock.Lock()
 	defer mdq.Lock.Unlock()
+
+	if mdq.Mdq != "" {
+		return
+	}
+
 	mdq.Cache = make(map[string]*MdXp)
 	if mdq.db != nil {
 		mdq.db.Close()
 	}
-	mdq.db, err = sql.Open("sqlite3", mdq.Path)
+	mdq.db, err = sql.Open("sqlite3", mdq.Dsn)
 	if err != nil {
 		return
 	}
@@ -153,6 +161,27 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, xml []byte, err err
 		mdq.Lock.Unlock()
 	}
 	return
+}
+
+func (mdq *MDQ) mdqget(key string, cache bool) (xp *goxml.Xp, xml []byte, err error) {
+	client := &http.Client{}
+	q := mdq.Mdq + url.PathEscape(key)
+	req, _ := http.NewRequest("GET", q, nil)
+	response, err := client.Do(req)
+
+	if err != nil || response.StatusCode == 500 {
+		err = goxml.Wrap(MetaDataNotFoundError, "err:Metadata not found", "key:"+key, "table:"+mdq.Short)
+		return nil, nil, err
+	}
+
+	defer response.Body.Close()
+	xml, err = ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	//md := gosaml.Inflate(xml)
+	xp = goxml.NewXp(xml)
+	return xp, xml, err
 }
 
 // MDQFilter refers Filtering by xpath for testing purposes
