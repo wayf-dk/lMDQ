@@ -70,6 +70,8 @@ var (
 	// MetaDataNotFoundError refers to error
 	MetaDataNotFoundError = errors.New("Metadata not found")
 	hexChars              = regexp.MustCompile("^[a-fA-F0-9]+$")
+	hubOrBirkEntity       = regexp.MustCompile(`^https://(birk|wayf)\.wayf\.dk\b`)
+	wayfSpEntity          = regexp.MustCompile(`^https://(wayfsp|wayfsp2)\.wayf\.dk\b`)
 )
 
 // Valid refers to check the validity of metadata
@@ -155,6 +157,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, xml []byte, err err
 	default:
 		md := gosaml.Inflate(xml)
 		xp = goxml.NewXp(md)
+		testify(xp)
 	}
 	if cache {
 		mdxp := new(MdXp)
@@ -243,4 +246,18 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 		return
 	}
 	return
+}
+
+func testify(xp *goxml.Xp) {
+	entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
+	sso := xp.Query1(nil, "//md:SingleSignOnService/@Location");
+	if *config.Dev || *config.Test {
+	    if hubOrBirkEntity.MatchString(entityID) || hubOrBirkEntity.MatchString(sso) {
+	        // we need to keep the prod cert as jwt2SAML reponses might be signed by a prod server
+	        before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
+		    xp.QueryDashP(nil, "/md:IDPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate[0]", config.TestCertificate, before[0])
+		} else if wayfSpEntity.MatchString(entityID) {
+		    xp.QueryDashP(nil, "/md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate", config.TestCertificate, nil)
+		}
+	}
 }
