@@ -38,6 +38,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"x.config"
 )
 
 type (
@@ -49,12 +51,11 @@ type (
 	}
 	// MDQ refers to metadata query
 	MDQ struct {
-		db                *sql.DB
-		stmt              *sql.Stmt
-		Path              string
-		Cache             map[string]*MdXp
-		Lock              sync.RWMutex
-		Table, Rev, Short string
+	    config.MdDb
+		db                     *sql.DB
+		stmt                   *sql.Stmt
+		Cache                  map[string]*MdXp
+		Lock                   sync.RWMutex
 	}
 	// MdXp refers to check validity
 	MdXp struct {
@@ -110,7 +111,11 @@ func (mdq *MDQ) Open() (err error) {
 // The hash can be used to decide if a cached dom object is still valid,
 // This might be an optimization as the database lookup is much faster that the parsing.
 func (mdq *MDQ) MDQ(key string) (xp *goxml.Xp, err error) {
-	xp, _, err = mdq.dbget(key, true)
+	if mdq.Mdq == "" {
+		xp, _, err = mdq.dbget(key, true)
+	} else {
+		xp, _, err = mdq.mdqget(key, true)
+	}
 	return
 }
 
