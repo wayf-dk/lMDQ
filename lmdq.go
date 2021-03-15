@@ -70,7 +70,7 @@ var (
 	// MetaDataNotFoundError refers to error
 	MetaDataNotFoundError = errors.New("Metadata not found")
 	hexChars              = regexp.MustCompile("^[a-fA-F0-9]+$")
-	hubOrBirkEntity       = regexp.MustCompile(`^https://(birk|wayf)\.wayf\.dk\b`)
+	hubOrBirkEntity       = regexp.MustCompile(`^https://(((birk|wayf)\.wayf\.dk)|(this\.is\.not\.a\.valid\.(external\.)?idp))\b`)
 	wayfSpEntity          = regexp.MustCompile(`^https://(wayfsp|wayfsp2)\.wayf\.dk\b`)
 )
 
