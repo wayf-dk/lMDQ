@@ -257,7 +257,7 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 func testify(xp *goxml.Xp) {
 	entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
 	sso := xp.Query1(nil, "//md:SingleSignOnService/@Location");
-	if config.Testify {
+	if config.MetadataMods {
 	    if hubOrBirkEntity.MatchString(entityID) || hubOrBirkEntity.MatchString(sso) {
 	        before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
 		    xp.QueryDashP(nil, "/md:IDPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate[0]", config.TestCertificate, before[0])
