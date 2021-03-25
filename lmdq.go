@@ -255,12 +255,14 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
   even when testing the IdP might use the prod hybrid
 */
 func testify(xp *goxml.Xp) {
+	entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
+	sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
 	if config.MetadataMods {
-		entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
-		sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
-		insertCert(xp, entityID, sso, config.TestCertificate1)
-		insertCert(xp, entityID, sso, config.TestCertificate2)
-		//config.Logger.Println(xp.PP())
+		insertCert(xp, entityID, sso, config.TestCert)
+	}
+	if config.Ed25519Cert != "" {
+		insertCert(xp, entityID, sso, config.Ed25519Cert)
+
 	}
 }
 
@@ -269,10 +271,10 @@ func insertCert(xp *goxml.Xp, entityID, sso, cert string) {
 		before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
 		xp.QueryDashP(nil, "/md:IDPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate[0]", cert, before[0])
 		if hubOrBirkEntity.MatchString(entityID) {
-		    before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
-		    if len(before) > 0 {
-    			xp.QueryDashP(nil, "/md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate[0]", cert, before[0])
-    		}
+			before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
+			if len(before) > 0 {
+				xp.QueryDashP(nil, "/md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate[0]", cert, before[0])
+			}
 		}
 	} else if wayfSpEntity.MatchString(entityID) {
 		before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
