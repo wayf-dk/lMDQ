@@ -259,10 +259,9 @@ func testify(xp *goxml.Xp) {
 	sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
 	if config.MetadataMods {
 		insertCert(xp, entityID, sso, config.TestCert)
-	}
-	if config.Ed25519Cert != "" {
-		insertCert(xp, entityID, sso, config.Ed25519Cert)
-
+		if config.Ed25519Cert != "" {
+			insertCert(xp, entityID, sso, config.Ed25519Cert)
+		}
 	}
 }
 
