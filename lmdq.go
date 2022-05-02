@@ -266,17 +266,18 @@ func testify(xp *goxml.Xp) {
 }
 
 func insertCert(xp *goxml.Xp, entityID, sso, cert string) {
-	if hubOrBirkEntity.MatchString(entityID) || hubOrBirkEntity.MatchString(sso) {
-		before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
-		xp.QueryDashP(nil, "/md:IDPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate[0]", cert, before[0])
-		if hubOrBirkEntity.MatchString(entityID) {
-			before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
-			if len(before) > 0 {
-				xp.QueryDashP(nil, "/md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate[0]", cert, before[0])
-			}
+	if hubOrBirkEntity.MatchString(entityID) {
+		before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor")
+		xp.QueryDashP(nil, "/md:IDPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate", cert, before[0])
+		if before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor"); len(before) > 0 {
+			xp.QueryDashP(nil, "/md:SPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate", cert, before[0])
 		}
+	} else if hubOrBirkEntity.MatchString(sso)  {
+		before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor")
+		xp.QueryDashP(nil, "/md:IDPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate", cert, before[0])
 	} else if wayfSpEntity.MatchString(entityID) {
-		before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
-		xp.QueryDashP(nil, "/md:SPSSODescriptor/md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate[0]", cert, before[0])
+		before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor")
+		xp.QueryDashP(nil, `/md:SPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate`, cert, before[0])
+	    xp.QueryDashP(nil, `/md:SPSSODescriptor/md:KeyDescriptor[1]/md:EncryptionMethod/@Algorithm`, "http://www.w3.org/2009/xmlenc11#aes192-cbc", nil)
 	}
 }
