@@ -1,4 +1,4 @@
-// +build !testmdq
+package lmdq
 
 /*  lMDQ is a MDQ server that caches metadata locally so it's local clients can lookup
     pre-checked metadata and not depend on a working connection to a remote MDQ server.
@@ -19,8 +19,6 @@
         √ caching interface
           invalidate cache ???
 */
-
-package lmdq
 
 import (
 	"crypto/sha1"
@@ -70,8 +68,6 @@ var (
 	// MetaDataNotFoundError refers to error
 	MetaDataNotFoundError = errors.New("Metadata not found")
 	hexChars              = regexp.MustCompile("^[a-fA-F0-9]+$")
-	hubOrBirkEntity       = regexp.MustCompile(`^https://(((birk|wayf)\.wayf\.dk)|(this\.is\.not\.a\.valid\.(external\.)?idp))\b`)
-	wayfSpEntity          = regexp.MustCompile(`^https://(wayfsp|wayfsp2)\.wayf\.dk\b`)
 )
 
 // Valid refers to check the validity of metadata
@@ -249,10 +245,10 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 }
 
 /**
-  Testify adds the config.Testcertificate(1|2) in front of the existing certificate in the metadata for specific entities
-  It has to be added in front of because the 1st certificate is used for doing the signing
-  The existing certificate has to be kept because if jwt2SAML is used by the IdP the assertion is signed by the hub itself,
-  even when testing the IdP might use the prod hybrid
+	Testify adds the config.Testcertificate(1|2) in front of the existing certificate in the metadata for specific entities
+	It has to be added in front of because the 1st certificate is used for doing the signing
+	The existing certificate has to be kept because if jwt2SAML is used by the IdP the assertion is signed by the hub itself,
+	even when testing the IdP might use the prod hybrid
 */
 func testify(xp *goxml.Xp) {
 	entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
@@ -266,18 +262,10 @@ func testify(xp *goxml.Xp) {
 }
 
 func insertCert(xp *goxml.Xp, entityID, sso, cert string) {
-	if hubOrBirkEntity.MatchString(entityID) {
-		before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor")
+	if before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor"); len(before) > 0 {
 		xp.QueryDashP(nil, "/md:IDPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate", cert, before[0])
-		if before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor"); len(before) > 0 {
-			xp.QueryDashP(nil, "/md:SPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate", cert, before[0])
-		}
-	} else if hubOrBirkEntity.MatchString(sso)  {
-		before := xp.Query(nil, "./md:IDPSSODescriptor/md:KeyDescriptor")
-		xp.QueryDashP(nil, "/md:IDPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate", cert, before[0])
-	} else if wayfSpEntity.MatchString(entityID) {
-		before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor")
-		xp.QueryDashP(nil, `/md:SPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate`, cert, before[0])
-	    xp.QueryDashP(nil, `/md:SPSSODescriptor/md:KeyDescriptor[1]/md:EncryptionMethod/@Algorithm`, "http://www.w3.org/2009/xmlenc11#aes192-cbc", nil)
+	}
+	if before := xp.Query(nil, "./md:SPSSODescriptor/md:KeyDescriptor"); len(before) > 0 {
+		xp.QueryDashP(nil, "/md:SPSSODescriptor/md:KeyDescriptor[0]/ds:KeyInfo/ds:X509Data/ds:X509Certificate", cert, before[0])
 	}
 }
