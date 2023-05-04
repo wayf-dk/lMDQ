@@ -251,9 +251,9 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 	even when testing the IdP might use the prod hybrid
 */
 func testify(xp *goxml.Xp) {
-	entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
-	sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
 	if config.MetadataMods {
+        entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
+        sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
 		insertCert(xp, entityID, sso, config.TestCert)
 		if config.Ed25519Cert != "" {
 			insertCert(xp, entityID, sso, config.Ed25519Cert)
