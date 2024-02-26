@@ -1,6 +1,6 @@
 module github.com/wayf-dk/lmdq
 
-go 1.22
+go 1.22.0
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.16
@@ -10,14 +10,15 @@ require (
 )
 
 require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/miekg/pkcs11 v1.0.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
-	github.com/wayf-dk/go-libxml2 v0.0.0-20210308214358-9c9e7b3a8e9c // indirect
-	github.com/wayf-dk/goeleven v0.0.0-20210622080738-31052701ada3 // indirect
-	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2 // indirect
-	golang.org/x/sys v0.0.0-20201119102817-f84b799fce68 // indirect
-	gopkg.in/xmlpath.v1 v1.0.0-20140413065638-a146725ea6e7 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/wayf-dk/go-libxml2 v0.0.0-20231207144727-d602dab8cded // indirect
+	github.com/wayf-dk/goeleven v0.0.0-20230816115740-d287bc08e939 // indirect
+	golang.org/x/crypto v0.19.0 // indirect
+	golang.org/x/sys v0.17.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace (
