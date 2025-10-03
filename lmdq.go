@@ -252,11 +252,10 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 */
 func testify(xp *goxml.Xp) {
 	if config.MetadataMods {
-        entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
-        sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
-		insertCert(xp, entityID, sso, config.TestCert)
-		if config.Ed25519Cert != "" {
-			insertCert(xp, entityID, sso, config.Ed25519Cert)
+	    for _, cert := range config.TestCerts {
+            entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
+            sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
+            insertCert(xp, entityID, sso, cert)
 		}
 	}
 }
