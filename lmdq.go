@@ -21,7 +21,7 @@ package lmdq
 */
 
 import (
-    "bytes"
+	"bytes"
 	"crypto/sha1"
 	"database/sql"
 	"errors"
@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -50,10 +51,10 @@ type (
 	// MDQ refers to metadata query
 	MDQ struct {
 		config.MdDb
-		db    *sql.DB
-		onestmt, multistmt, selfstmt  *sql.Stmt
-		Cache map[string]*MdXp
-		Lock  sync.RWMutex
+		db                           *sql.DB
+		onestmt, multistmt, selfstmt *sql.Stmt
+		Cache                        map[string]*MdXp
+		Lock                         sync.RWMutex
 	}
 	// MdXp refers to check validity
 	MdXp struct {
@@ -92,7 +93,7 @@ func (mdq *MDQ) Open() (err error) {
 		return
 	}
 
-    findEntity := ` ? < l.hash||'z' AND l.hash||'z' <= ?||'z' `
+	findEntity := ` ? < l.hash||'z' AND l.hash||'z' <= ?||'z' `
 
 	mdq.multistmt, err = mdq.db.Prepare(`SELECT
     e.md
@@ -113,7 +114,7 @@ WHERE
                     lookup_` + mdq.TableRev + ` l
                 WHERE ` + findEntity + `AND l.entity_id_fk = f.entity_id_fk ))`)
 
-    mdq.onestmt, err = mdq.db.Prepare(`SELECT
+	mdq.onestmt, err = mdq.db.Prepare(`SELECT
     e.md
 FROM
     (   SELECT
@@ -152,75 +153,92 @@ FROM
 }
 
 // MDQ looks up an entity using the supplied feed and key.
-// The key can be an entityID or a location, optionally in {sha1} format
+// The key can be an entityID or a location, optionally sha1 hashed
 // It returns a non nil err if the entity is not found
-// and the metadata and a hash/etag over the content if it is.
-// The hash can be used to decide if a cached dom object is still valid,
-// This might be an optimization as the database lookup is much faster that the parsing.
+// and the metadata and nil if it is.
 func (mdq *MDQ) MDQ(key string) (xp *goxml.Xp, err error) {
 	if mdq.Mdq == "" {
-	    return mdq.WebMDQ(key, key)
-//		return mdq.dbget(key, true)
+		return mdq.WebMDQ(key, key, false)
+		//		return mdq.dbget(key, true)
 	} else {
+		//return mdq.WebMDQ(key, key)
 		return mdq.mdqget(key, true)
 	}
 }
 
 func c14n(key string) (string) {
-    if hexChars.MatchString(key) || key == "" {
-        // already sha1'ed - do nothing
+	if hexChars.MatchString(key) || key == "" {
+		// already sha1'ed - do nothing
 	} else {
-	    key = fmt.Sprintf("%x", sha1.Sum([]byte(key)))
+		key = fmt.Sprintf("%x", sha1.Sum([]byte(key)))
 	}
-    return key
+	return key
 }
 
-func (mdq *MDQ) WebMDQ(key, key2 string) (xp *goxml.Xp, err error) {
-    var rows *sql.Rows
-    key, key2 = c14n(key), c14n(key2)
-    if key == key2 {
-      	rows, err = mdq.selfstmt.Query(key, key)
-    } else if key2 != "" {
-        rows, err = mdq.onestmt.Query(key2, key2, key2, key2, key, key)
-    } else {
-    	rows, err = mdq.multistmt.Query(key, key)
-    }
+func (mdq *MDQ) WebMDQ(key, key2 string, forWeb bool) (xp *goxml.Xp, err error) {
+	var rows *sql.Rows
+	originalKey := key
+	key, key2 = c14n(key), c14n(key2)
+	if key == key2 {
+		rows, err = mdq.selfstmt.Query(key, key)
+	} else if key2 != "" {
+		rows, err = mdq.onestmt.Query(key2, key2, key2, key2, key, key)
+	} else {
+		rows, err = mdq.multistmt.Query(key, key)
+	}
 	if err != nil {
 		return
 	}
 	defer rows.Close()
+	prefix := []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	md, c := []byte{}, 0
 	for rows.Next() {
 		var buf []byte
 		if err = rows.Scan(&buf); err != nil {
 			return
 		}
-		prefix := `<?xml version="1.0" encoding="UTF-8"?>
-`
-		entitymd, _ := bytes.CutPrefix(gosaml.Inflate(buf), []byte(prefix))
+		entitymd, _ := bytes.CutPrefix(gosaml.Inflate(buf), prefix)
 		md = append(md, entitymd...)
 		c++
 	}
 	if c == 0 {
-	    return xp, MetaDataNotFoundError
+		err = goxml.Wrap(MetaDataNotFoundError, "err:Metadata not found", "key:"+originalKey, "table:"+mdq.Short)
+		return xp, err
 	}
 	if c >= 2 {
-        md = append([]byte(`<?xml version="1.0" encoding="UTF-8"?><md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata">`), md...)
-        md = append(md, `</md:EntitiesDescriptor>`...)
-    }
+		md = append([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata">`), md...)
+		md = append(md, `</md:EntitiesDescriptor>`...)
+	}
 	xp = goxml.NewXp(md)
-    if c == 1 {
-    	testify(xp)
-    }
-    for _, signature := range xp.Query(nil, "./md:EntityDescriptor/ds:Signature") {
-        xp.Rm(signature, ".")
-    }
+	if c == 1 {
+		testify(xp)
+	}
+	for _, signature := range xp.Query(nil, "/md:EntityDescriptor/ds:Signature") {
+		xp.Rm(signature, ".")
+	}
+	if forWeb && mdq.Short != "sp" {
+		rmCertByName(config.MDQRmCertByName, xp)
+		for _, location := range config.MDQ2KLocations {
+			xp.Rm(nil, ".//md:SingleLogoutService[starts-with(@Location, '"+location+"')]")
+			xp.Rm(nil, ".//md:SingleSignOnService[starts-with(@Location, '"+location+"')]")
+		}
+	}
 	return
 }
 
+func rmCertByName(names []string, xp *goxml.Xp) {
+	certs := xp.Query(nil, ".//md:KeyDescriptor/ds:KeyInfo/ds:X509Data/ds:X509Certificate")
+	for _, cert := range certs {
+		n, _, _ := gosaml.PublicKeyInfo(cert.NodeValue())
+		if slices.Index(names, n) >= 0 {
+            xp.Rm(cert, "../../..")
+		}
+	}
+}
+
 func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
-    k := key
-    key = c14n(key)
+	k := key
+	key = c14n(key)
 	mdq.Lock.RLock()
 	cachedxp := mdq.Cache[key]
 	if cachedxp != nil && cachedxp.Valid(cacheduration) {
@@ -229,7 +247,7 @@ func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 		return
 	}
 	mdq.Lock.RUnlock()
-    var xml []byte
+	var xml []byte
 	err = mdq.selfstmt.QueryRow(key, key).Scan(&xml)
 	switch {
 	case err == sql.ErrNoRows:
@@ -337,10 +355,10 @@ func (mdq *MDQ) getEntityList() (entities map[string]EntityRec, err error) {
 */
 func testify(xp *goxml.Xp) {
 	if config.MetadataMods {
-	    for _, cert := range config.TestCerts {
-            entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
-            sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
-            insertCert(xp, entityID, sso, cert)
+		for _, cert := range config.TestCerts {
+			entityID := xp.Query1(nil, "/md:EntityDescriptor/@entityID")
+			sso := xp.Query1(nil, "//md:SingleSignOnService/@Location")
+			insertCert(xp, entityID, sso, cert)
 		}
 	}
 }
