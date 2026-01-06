@@ -142,9 +142,9 @@ FROM
             fed_` + mdq.TableRev + `    f
         WHERE
             ` + findEntity + `
-            AND l.entity_id_fk = f.entity_id_fk ) i;
+            AND l.entity_id_fk = f.entity_id_fk ) i limit 1;
 `)
-	mdq.selfstmt, err = mdq.db.Prepare(`select e.md md from entity_` + mdq.Table + ` e where e.id in (SELECT l.entity_id_fk FROM lookup_` + mdq.Table + ` l WHERE` + findEntity +`)`)
+	mdq.selfstmt, err = mdq.db.Prepare(`select e.md md from entity_` + mdq.Table + ` e where e.id in (SELECT l.entity_id_fk FROM lookup_` + mdq.Table + ` l WHERE` + findEntity + `) limit 1`)
 	if err != nil {
 		return
 	}
