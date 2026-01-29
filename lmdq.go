@@ -22,6 +22,7 @@ package lmdq
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha1"
 	"database/sql"
 	"errors"
@@ -206,21 +207,22 @@ func (mdq *MDQ) WebMDQ(key, key2 string, forWeb bool) (xp *goxml.Xp, err error) 
 		return xp, err
 	}
 	if c >= 2 {
-		md = append([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata">`), md...)
+		md = append([]byte(`<md:EntitiesDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" cacheDuration="PT6H" validUntil="`+time.Now().UTC().Add(time.Hour * 24 * 7).Format(gosaml.XsDateTime)+`" ID="_MDQ-`+rand.Text()+`">`), md...)
 		md = append(md, `</md:EntitiesDescriptor>`...)
 	}
 	xp = goxml.NewXp(md)
+
 	if c == 1 {
 		testify(xp)
 	}
-	for _, signature := range xp.Query(nil, "/md:EntityDescriptor/ds:Signature") {
+	for _, signature := range xp.Query(nil, "(md:EntityDescriptor | /md:EntityDescriptor)/ds:Signature") {
 		xp.Rm(signature, ".")
 	}
 	if forWeb && mdq.Short != "sp" {
 		rmCertByName(config.MDQRmCertByName, xp)
 		for _, location := range config.MDQ2KLocations {
-			xp.Rm(nil, ".//md:SingleLogoutService[starts-with(@Location, '"+location+"')]")
 			xp.Rm(nil, ".//md:SingleSignOnService[starts-with(@Location, '"+location+"')]")
+			xp.Rm(nil, ".//md:SingleLogoutService[starts-with(@Location, '"+location+"')]")
 		}
 	}
 	return
