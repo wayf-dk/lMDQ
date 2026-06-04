@@ -167,7 +167,7 @@ func (mdq *MDQ) MDQ(key string) (xp *goxml.Xp, err error) {
 	}
 }
 
-func c14n(key string) (string) {
+func C14n(key string) (string) {
 	if hexChars.MatchString(key) || key == "" {
 		// already sha1'ed - do nothing
 	} else {
@@ -179,7 +179,7 @@ func c14n(key string) (string) {
 func (mdq *MDQ) WebMDQ(key, key2 string, forWeb bool) (xp *goxml.Xp, err error) {
 	var rows *sql.Rows
 	originalKey := key
-	key, key2 = c14n(key), c14n(key2)
+	key, key2 = C14n(key), C14n(key2)
 	if key == key2 {
 		rows, err = mdq.selfstmt.Query(key, key)
 	} else if key2 != "" {
@@ -240,7 +240,7 @@ func rmCertByName(names []string, xp *goxml.Xp) {
 
 func (mdq *MDQ) dbget(key string, cache bool) (xp *goxml.Xp, err error) {
 	k := key
-	key = c14n(key)
+	key = C14n(key)
 	mdq.Lock.RLock()
 	cachedxp := mdq.Cache[key]
 	if cachedxp != nil && cachedxp.Valid(cacheduration) {
